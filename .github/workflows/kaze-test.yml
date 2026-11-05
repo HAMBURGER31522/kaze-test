@@ -1,0 +1,38 @@
+name: kaze-test
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+jobs:
+  test:
+    runs-on: macos-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Kaze
+        run: |
+          curl -L -o kaze.dmg https://github.com/jackwener/Kaze/releases/download/v0.27.2/Kaze-0.27.2-arm64.dmg
+          hdiutil attach kaze.dmg -nobrowse -mountpoint /Volumes/Kaze
+          cp -R /Volumes/Kaze/*.app /Applications/
+          hdiutil detach /Volumes/Kaze
+          ls /Applications | grep -i kaze
+          xattr -dr com.apple.quarantine /Applications/Kaze.app || true
+          ls /Applications/Kaze.app/Contents/MacOS
+      - name: Runner IP
+        run: curl -s https://ipinfo.io/json || true
+      - run: npm i playwright-core@1
+      - name: Test stock Chrome
+        run: node test.js chrome || true
+      - name: Test Kaze
+        run: |
+          BIN=$(ls /Applications/Kaze.app/Contents/MacOS | head -1)
+          "/Applications/Kaze.app/Contents/MacOS/$BIN" --remote-debugging-port=9222 > kaze.log 2>&1 &
+          sleep 30
+          curl -s http://127.0.0.1:9222/json/version || echo "NO CDP"
+          node test.js kaze || true
+          tail -n 50 kaze.log || true
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: shots
+          path: shots/
