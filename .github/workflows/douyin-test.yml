@@ -1,0 +1,31 @@
+name: douyin-test
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'test-douyin.js'
+      - '.github/workflows/douyin-test.yml'
+jobs:
+  test:
+    runs-on: macos-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Kaze
+        run: |
+          curl -L -o kaze.dmg https://github.com/jackwener/Kaze/releases/download/v0.27.2/Kaze-0.27.2-arm64.dmg
+          hdiutil attach kaze.dmg -nobrowse -mountpoint /Volumes/Kaze
+          cp -R /Volumes/Kaze/*.app /Applications/
+          hdiutil detach /Volumes/Kaze
+          xattr -dr com.apple.quarantine /Applications/Kaze.app || true
+      - run: npm i playwright-core@1
+      - name: Douyin with stock Chrome
+        run: node test-douyin.js chrome || true
+      - name: Douyin with Kaze
+        run: |
+          BIN=$(ls /Applications/Kaze.app/Contents/MacOS | head -1)
+          "/Applications/Kaze.app/Contents/MacOS/$BIN" --remote-debugging-port=9222 > kaze.log 2>&1 &
+          sleep 30
+          curl -s http://127.0.0.1:9222/json/version || echo "NO CDP"
+          node test-douyin.js kaze || true
