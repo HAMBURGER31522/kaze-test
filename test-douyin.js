@@ -23,18 +23,24 @@ function summarize(url, t) {
     browser = await chromium.launch({ channel: 'chrome', headless: false });
     ctx = await browser.newContext({ locale: 'zh-CN' });
   }
+  // Kaze's CDP does not support creating new tabs, so reuse its existing tab
+  const getPage = async () => {
+    if (mode === 'kaze') { const ps = ctx.pages(); if (ps.length) return ps[0]; }
+    return await ctx.newPage();
+  };
   // warm-up: visit the home page once so cookies (ttwid, msToken) get set
   try {
-    const w = await ctx.newPage();
+    const w = await getPage();
     await w.goto('https://www.douyin.com/', { timeout: 90000, waitUntil: 'commit' });
     await w.waitForTimeout(15000);
     console.log('=== [' + mode + '] warmup ok ' + w.url());
-    await w.close();
+    if (mode !== 'kaze') await w.close();
   } catch (e) { console.log('=== [' + mode + '] warmup ERROR ' + e.message.split('\n')[0]); }
   for (const [k, u] of Object.entries(urls)) {
     let page;
     try {
-      page = await ctx.newPage();
+      page = await getPage();
+      page.removeAllListeners('response');
       const api = [];
       page.on('response', async r => {
         const url = r.url();
